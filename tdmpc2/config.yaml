@@ -8,7 +8,7 @@ obs: state
 # evaluation
 checkpoint: ???
 eval_episodes: 10
-eval_freq: 50000
+eval_freq: 10000
 
 # training
 steps: 10_000_000
@@ -90,6 +90,7 @@ sb3_algo: ppo       # for trajectory collection
 morphology: false   # True if we want to use image + morphology observation
 morphology_seed: 1  # Seed for morphology generation
 ckpt_step: 100000   # Step to save the checkpoint
+morphology_use_gnn: false   # True if we want to use GNN for morphology
 
 # transform2act params
 transform2act:

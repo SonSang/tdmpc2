@@ -115,8 +115,11 @@ def perturb_model(model: str, domain: str, seed: int = None):
 		default_leg_length = 0.25
 		rand_range = (0.5, 2.0)
   
-		rng = np.random.default_rng(seed=seed)
-		leg_length = default_leg_length * rng.uniform(*rand_range)
+		if seed >= 0:
+			rng = np.random.default_rng(seed=seed)
+			leg_length = default_leg_length * rng.uniform(*rand_range)
+		else:
+			leg_length = default_leg_length * -seed
 		leg_length_update = leg_length - default_leg_length
   
 		'''
@@ -167,23 +170,22 @@ def make_env(cfg):
 	and graph observation.
 	'''
  
-	# get original Mujoco model
-	domain, _ = cfg.task.replace('-', '_').split('_', 1)
-	if domain not in DOMAIN:
-		raise ValueError(f'Invalid domain: {domain}')
-	original_model, _ = globals()[f'{domain}_get_model_and_assets']()
- 
-	# backup original model
 	if cfg.morphology:
+     		
+		# get original Mujoco model
+		domain, _ = cfg.task.replace('-', '_').split('_', 1)
+		if domain not in DOMAIN:
+			raise ValueError(f'Invalid domain: {domain}')
+		original_model, _ = globals()[f'{domain}_get_model_and_assets']()
+	
+		# backup original model
 		with open(f'{_SUITE_DIR}/{domain}_backup.xml', 'w') as f:
 			model_str = original_model.decode('utf-8')
 			f.write(model_str)
+ 		
+		model = perturb_model(original_model, domain, cfg.morphology_seed)
  
-	# perturb morphology
-	model = perturb_model(original_model, domain, cfg.morphology_seed)
- 
-	# save perturbed morphology
-	if cfg.morphology:
+		# save perturbed morphology
 		with open(f'{_SUITE_DIR}/{domain}.xml', 'w') as f:
 			model_str = model.decode('utf-8')
 			f.write(model_str)
@@ -195,8 +197,6 @@ def make_env(cfg):
 		with open(f'{_SUITE_DIR}/{domain}.xml', 'w') as f:
 			model_str = original_model.decode('utf-8')
 			f.write(model_str)
- 
-	if cfg.morphology:
 		env = MJGraphWrapper(model, env0)
 	else:
 		env = env0

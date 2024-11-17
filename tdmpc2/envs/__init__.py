@@ -70,19 +70,21 @@ def make_env(cfg):
 	gym.logger.set_level(40)
 	if cfg.multitask:
 		env = make_multitask_env(cfg)
-
-	# @sanghyun: find out if the environment is t2a environment,
-	# and if it is, we need to use image and dict state input.
-	is_t2a = False
-	try:
-		task_name = cfg.task
-		task_env = task_name.split('_')[0]
-		if task_env == "t2a":
-			is_t2a = True
-	except:
-		pass
-
+		is_our_env = False
+  
 	else:
+		
+		# @sanghyun: find out if the environment is t2a environment,
+		# and if it is, we need to use image and dict state input.
+		is_t2a = False
+		try:
+			task_name = cfg.task
+			task_env = task_name.split('_')[0]
+			if task_env == "t2a":
+				is_t2a = True
+		except:
+			pass
+
 		env = None
 		for fn in [make_transform2act_env, make_dm_control_env, make_maniskill_env, make_metaworld_env, make_myosuite_env]:
 			try:

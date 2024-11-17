@@ -132,3 +132,5 @@ dmypy.json
 .vscode/
 logs/
 outputs/
+offline_dataset/
+walker_dataset/

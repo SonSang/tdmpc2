@@ -142,6 +142,24 @@ def conv(in_shape, num_channels, act=None):
 		layers.append(act)
 	return nn.Sequential(*layers)
 
+def mconv(in_shape, num_channels, act=None):
+	"""
+	Basic convolutional encoder for TD-MPC2 with raw image observations.
+	4 layers of convolution with ReLU activations, followed by a linear layer.
+	"""
+	assert in_shape[-1] == 96 # assumes rgb observations to be 96x96
+	layers = [
+		# ShiftAug(), PixelPreprocess(),
+		# @sanghyun: remove ShiftAug for now...
+		PixelPreprocess(),
+		nn.Conv2d(in_shape[0], num_channels, 7, stride=2), nn.ReLU(inplace=True),
+		nn.Conv2d(num_channels, num_channels, 5, stride=2), nn.ReLU(inplace=True),
+		nn.Conv2d(num_channels, num_channels, 3, stride=2), nn.ReLU(inplace=True),
+		nn.Conv2d(num_channels, num_channels, 3, stride=1), nn.Flatten()]
+	if act:
+		layers.append(act)
+	return nn.Sequential(*layers)
+
 
 def enc(cfg, out={}):
 	"""
@@ -185,5 +203,44 @@ def t2a_enc(cfg, env, out={}):
 
 	# final mlp for final latent
 	out['final_mlp'] = mlp(cfg.latent_dim + cfg.latent_dim, max(cfg.num_enc_layers-1, 1)*[cfg.enc_dim], cfg.latent_dim, act=SimNorm(cfg))	
+ 
+	return nn.ModuleDict(out)
+
+def morphology_enc(cfg, out={}):
+	"""
+	Returns a dictionary of encoders for each observation in the dict.
+	Works for DMControl env with morphology information.
+	"""
+ 
+	# srgb
+	out['srgb'] = mconv(cfg.obs_shape['srgb'], cfg.num_channels, act=SimNorm(cfg))
+	rand_input = torch.randn((1, *cfg.obs_shape['srgb']), dtype=torch.float32)
+	rand_output = out['srgb'](rand_input)
+	rgb_out_dim = rand_output.shape[-1]
+ 
+	NODE_FEATURE_SIZE = 64
+ 
+	# srgb_mlp: used to encode srgb features in gnn or final output
+	if cfg.morphology_use_gnn:
+		out['srgb_mlp'] = mlp(rgb_out_dim, max(cfg.num_enc_layers-1, 1)*[cfg.enc_dim], NODE_FEATURE_SIZE, act=torch.nn.Tanh())
+	else:
+		out['srgb_mlp'] = mlp(rgb_out_dim, max(cfg.num_enc_layers-1, 1)*[cfg.enc_dim], cfg.latent_dim, act=SimNorm(cfg))
+  
+	# node_mlp: used to define node feature, because
+	# there could be multiple geoms in one node
+	node_obs_size = 17		# @TODO: Fixed to 17 for now
+	out['node_mlp'] = mlp(node_obs_size, max(cfg.num_enc_layers-1, 1)*[cfg.enc_dim], NODE_FEATURE_SIZE, act=torch.nn.Tanh())
+ 
+	# gnn
+	gnn_input_size = NODE_FEATURE_SIZE
+	gnn_spec = cfg['transform2act']['policy_specs']['control_gnn_specs']
+	out['gnn'] = GNNSimple(in_dim=gnn_input_size, cfg=gnn_spec, node_dim=1)
+ 
+	# gnn_mlp
+	gnn_out_dim = out['gnn'].out_dim
+	out['gnn_mlp'] = mlp(gnn_out_dim, max(cfg.num_enc_layers-1, 1)*[cfg.enc_dim], cfg.latent_dim, act=SimNorm(cfg))
+
+	# final mlp for final latent
+	out['final_mlp'] = mlp(rgb_out_dim + cfg.latent_dim, max(cfg.num_enc_layers-1, 1)*[cfg.enc_dim], cfg.latent_dim, act=SimNorm(cfg))	
  
 	return nn.ModuleDict(out)

@@ -17,6 +17,8 @@ from trainer.offline_trainer import OfflineTrainer
 from trainer.online_trainer import OnlineTrainer
 from common.logger import Logger
 
+from trainer.morphology_offline_trainer import MorpOfflineTrainer
+
 torch.backends.cudnn.benchmark = True
 
 
@@ -27,6 +29,7 @@ def train(cfg: dict):
 
 	Most relevant args:
 		`task`: task name (or mt30/mt80 for multi-task training)
+				(@sanghyun, or wm for walker morphology training)
 		`model_size`: model size, must be one of `[1, 5, 19, 48, 317]` (default: 5)
 		`steps`: number of training/environment steps (default: 10M)
 		`seed`: random seed (default: 1)
@@ -47,6 +50,23 @@ def train(cfg: dict):
 	print(colored('Work dir:', 'yellow', attrs=['bold']), cfg.work_dir)
 
 	trainer_cls = OfflineTrainer if cfg.multitask else OnlineTrainer
+	
+	if cfg.morphology:
+		# @sanghyun: walker morphology training
+		cfg.morphology = (cfg.task == 'walker_walk')
+ 
+	if cfg.task == 'walker_walk' and cfg.morphology:
+		try:
+			if cfg.data_dir is not None:
+				trainer_cls = MorpOfflineTrainer
+				print('Training walker morphology with offline data.')
+			else:
+				trainer_cls = OnlineTrainer
+				print('Training walker morphology with online data.')
+		except:
+			trainer_cls = OnlineTrainer
+			print('Training walker morphology with online data.')
+	
 	env = make_env(cfg)
 	trainer = trainer_cls(
 		cfg=cfg,

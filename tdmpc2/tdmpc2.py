@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from common import math
 from common.scale import RunningScale
-from common.world_model import WorldModel, T2AWorldModel
+from common.world_model import WorldModel, T2AWorldModel, MorphologyWorldModel
 
 
 class TDMPC2:
@@ -29,8 +29,15 @@ class TDMPC2:
 		except:
 			pass
 
+		# @sanghyun: find out if we use morphology-aware DMControl environment.
+		# If it is, we find out if we want to use GNN to encode the morphology.
+		self.is_morphology = self.cfg.morphology
+		self.morphology_use_gnn = self.cfg.morphology_use_gnn
+
 		if self.is_t2a:
 			self.model = T2AWorldModel(cfg, env).to(self.device)
+		elif self.is_morphology:
+			self.model = MorphologyWorldModel(cfg, self.morphology_use_gnn).to(self.device)
 		else:
 			self.model = WorldModel(cfg).to(self.device)
 		
@@ -99,8 +106,15 @@ class TDMPC2:
 		"""
 		if task is not None:
 			task = torch.tensor([task], device=self.device)
-		if self.is_t2a:
-			obs = {k: v.to(self.device, non_blocking=True).unsqueeze(0) for k, v in obs.items()}
+		if self.is_t2a or self.is_morphology:
+			nobs = {}
+			for k, v in obs.items():
+				if not isinstance(v, torch.Tensor):
+					nv = torch.tensor(v, device=self.device, dtype=torch.float32)
+				else:
+					nv = v
+				nobs[k] = nv.to(self.device, non_blocking=True).unsqueeze(0)
+			obs = nobs		
 		else:
 			obs = obs.to(self.device, non_blocking=True).unsqueeze(0)
 		
@@ -258,6 +272,16 @@ class TDMPC2:
 				tt_obs['rgb'] = t_obs['rgb'].reshape((l0 * l1, t_obs['rgb'].shape[2], t_obs['rgb'].shape[3], t_obs['rgb'].shape[4]))
 				tt_obs['node'] = t_obs['node'].reshape((l0 * l1, t_obs['node'].shape[2], t_obs['node'].shape[3]))
 				tt_obs['edge'] = t_obs['edge'].reshape((l0 * l1, t_obs['edge'].shape[2], t_obs['edge'].shape[3]))
+				next_z = self.model.encode(tt_obs, task)
+				next_z = next_z.reshape((l0, l1, -1))
+			elif self.is_morphology:
+				t_obs = obs[1:]
+				tt_obs = {}
+				# merge first two dimensions
+				l0, l1 = t_obs['srgb'].shape[0], t_obs['srgb'].shape[1]
+				tt_obs['srgb'] = t_obs['srgb'].reshape((l0 * l1, t_obs['srgb'].shape[2], t_obs['srgb'].shape[3], t_obs['srgb'].shape[4]))
+				tt_obs['node'] = t_obs['node'].reshape((l0 * l1, t_obs['node'].shape[2], t_obs['node'].shape[3], t_obs['node'].shape[4]))
+				tt_obs['edge'] = t_obs['edge'].reshape((l0 * l1, t_obs['edge'].shape[2], t_obs['edge'].shape[3], t_obs['edge'].shape[4]))
 				next_z = self.model.encode(tt_obs, task)
 				next_z = next_z.reshape((l0, l1, -1))
 			else:

@@ -14,6 +14,8 @@ from common.seed import set_seed
 from envs import make_env
 from tdmpc2 import TDMPC2
 
+from tqdm import tqdm
+
 torch.backends.cudnn.benchmark = True
 
 
@@ -41,7 +43,9 @@ def evaluate(cfg: dict):
 	"""
 	assert torch.cuda.is_available()
 	assert cfg.eval_episodes > 0, 'Must evaluate at least 1 episode.'
+	work_dir = cfg.work_dir
 	cfg = parse_cfg(cfg)
+	cfg.work_dir = work_dir
 	set_seed(cfg.seed)
 	print(colored(f'Task: {cfg.task}', 'blue', attrs=['bold']))
 	print(colored(f'Model size: {cfg.get("model_size", "default")}', 'blue', attrs=['bold']))
@@ -72,8 +76,10 @@ def evaluate(cfg: dict):
 		if not cfg.multitask:
 			task_idx = None
 		ep_rewards, ep_successes = [], []
-		for i in range(cfg.eval_episodes):
-			obs, done, ep_reward, t = env.reset(task_idx=task_idx), False, 0, 0
+		bar = tqdm(range(cfg.eval_episodes))
+		for i in bar:
+			# obs, done, ep_reward, t = env.reset(task_idx=task_idx), False, 0, 0
+			obs, done, ep_reward, t = env.reset(), False, 0, 0
 			if cfg.save_video:
 				frames = [env.render()]
 			while not done:
@@ -85,6 +91,7 @@ def evaluate(cfg: dict):
 					frames.append(env.render())
 			ep_rewards.append(ep_reward)
 			ep_successes.append(info['success'])
+			bar.set_description(f'{task} R: {ep_reward:.01f}')
 			if cfg.save_video:
 				imageio.mimsave(
 					os.path.join(video_dir, f'{task}-{i}.mp4'), frames, fps=15)
@@ -95,6 +102,11 @@ def evaluate(cfg: dict):
 		print(colored(f'  {task:<22}' \
 			f'\tR: {ep_rewards:.01f}  ' \
 			f'\tS: {ep_successes:.02f}', 'yellow'))
+  
+		# save result
+		with open(os.path.join(cfg.work_dir, 'eval_result.txt'), 'a') as f:
+			f.write(f'{task},{ep_rewards},{ep_successes}\n')
+   
 	if cfg.multitask:
 		print(colored(f'Normalized score: {np.mean(scores):.02f}', 'yellow', attrs=['bold']))
 
